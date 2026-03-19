@@ -1,7 +1,7 @@
 
   # Remote Configuration
 
-  This is a code bundle for Remote Configuration. The original project is available at https://www.figma.com/design/pY7vM3xmmkDMGzbYdBUGeL/Remote-Configuration.
+  This is a code bundle for Netmera's Remote Configuration. 
 
   ## Running the code
 
