@@ -56,6 +56,12 @@ function normalizeParameterValue(type: ParameterType, value: unknown): Parameter
 }
 
 function normalizeConfig(config: RemoteConfig): RemoteConfig {
+  const normalizeGoal = (goal: RemoteConfig['conversionGoal'] | any) => {
+    const event = `${goal?.event || goal?.eventName || ''}`.trim();
+    if (!event) return null;
+    const attribute = `${goal?.attribute || ''}`.trim();
+    return { event, attribute: attribute || undefined };
+  };
   const configKey = config.configKey || config.key || '';
   const sourceKeys = config.keys && config.keys.length > 0 ? config.keys : undefined;
   const parameters: Parameter[] = (config.parameters && config.parameters.length > 0)
@@ -72,6 +78,13 @@ function normalizeConfig(config: RemoteConfig): RemoteConfig {
     });
 
   const derivedType = parameters[0] ? toConfigType(parameters[0].type) : config.type;
+  const conversionGoals = (config.conversionGoals || [])
+    .map(normalizeGoal)
+    .filter((goal): goal is NonNullable<typeof goal> => Boolean(goal));
+  const fallbackGoal = normalizeGoal(config.conversionGoal);
+  const mergedConversionGoals = conversionGoals.length > 0
+    ? conversionGoals
+    : (fallbackGoal ? [fallbackGoal] : []);
   const keys = (sourceKeys || parameters.map(p => {
     const mappedType = toConfigType(p.type);
     const defaultValue = p.type === 'JSON'
@@ -99,6 +112,8 @@ function normalizeConfig(config: RemoteConfig): RemoteConfig {
     parameters,
     keys,
     type: derivedType,
+    conversionGoals: mergedConversionGoals,
+    conversionGoal: mergedConversionGoals[0],
   };
 }
 

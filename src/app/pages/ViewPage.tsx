@@ -1,18 +1,22 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   Edit2, Play, Square, ChevronDown, ChevronRight,
   BarChart2, Settings, Clock, Users, TrendingUp, Award, Zap, AlertTriangle,
-  Copy, Target, Info, ChevronUp
+  Copy, Target, Info, ChevronUp, Calendar, Pencil, RotateCcw
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend
 } from 'recharts';
+import { Chart, CategoryScale, LinearScale, PointElement, LineElement, ArcElement, BarElement, Tooltip as ChartTooltip, Filler, Legend as ChartLegend } from 'chart.js';
 import { useConfigs } from '../store/ConfigContext';
 import StatusBadge from '../components/remote-config/StatusBadge';
 import { RemoteConfig, Status } from '../types';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
+import rcReportHtml from '../report/rc_report.html?raw';
+
+Chart.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, BarElement, ChartTooltip, Filler, ChartLegend);
 
 const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
   Boolean: { bg: '#FEF3C7', text: '#92400E' },
@@ -66,6 +70,110 @@ function parsePayloadValue(value: string, type: string): unknown {
   return value;
 }
 
+type SingleVariantReportData = {
+  configName: string;
+  configKey: string;
+  status: 'LIVE' | 'DRAFT' | 'STOPPED';
+  liveDate: string;
+  metrics: {
+    peopleReached: number;
+    peopleReachedDelta: number;
+    engagementRate: number;
+    engagementRateDelta: number;
+    revenueAttributed: number;
+    revenueDelta: number;
+  };
+  timeSeries: { date: string; reached: number; engagementRate: number }[];
+  baselineEngagementRate: number;
+  platformBreakdown: { platform: 'iOS' | 'Android' | 'Web'; users: number; percentage: number; engagementRate: number }[];
+  segmentPerformance: { segment: string; engagementRate: number }[];
+};
+
+function buildSingleVariantMock(config: RemoteConfig): SingleVariantReportData {
+  const now = new Date();
+  const dates = Array.from({ length: 92 }, (_, i) => {
+    const d = new Date(now);
+    d.setDate(now.getDate() - (91 - i));
+    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return {
+      date: label,
+      reached: Math.round(18000 + i * 95 + Math.sin(i / 4) * 1500),
+      engagementRate: Number((28 + Math.sin(i / 6) * 2.1 + i * 0.06).toFixed(1)),
+    };
+  });
+  return {
+    configName: config.name || 'Feature_flags_json',
+    configKey: config.configKey || config.key || 'feature_flags_json',
+    status: config.status as 'LIVE' | 'DRAFT' | 'STOPPED',
+    liveDate: config.updatedAt || '2026-03-12',
+    metrics: {
+      peopleReached: 28410,
+      peopleReachedDelta: 8.2,
+      engagementRate: 34.7,
+      engagementRateDelta: 6.1,
+      revenueAttributed: 12840,
+      revenueDelta: 14.3,
+    },
+    timeSeries: dates,
+    baselineEngagementRate: 28.1,
+    platformBreakdown: [
+      { platform: 'iOS', users: 13560, percentage: 47.7, engagementRate: 36.8 },
+      { platform: 'Android', users: 12310, percentage: 43.3, engagementRate: 33.9 },
+      { platform: 'Web', users: 2540, percentage: 9.0, engagementRate: 24.2 },
+    ],
+    segmentPerformance: [
+      { segment: 'New users', engagementRate: 29 },
+      { segment: 'Power users', engagementRate: 57 },
+      { segment: 'Premium', engagementRate: 49 },
+      { segment: 'Returning', engagementRate: 41 },
+      { segment: 'At-risk', engagementRate: 26 },
+    ],
+  };
+}
+
+function SingleVariantReportView({ config }: { config: RemoteConfig }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const html = useMemo(() => {
+    return rcReportHtml
+      .replaceAll('Feature_flags_json', config.name || 'Feature_flags_json')
+      .replaceAll('feature_flags_json', config.configKey || config.key || 'feature_flags_json');
+  }, [config]);
+
+  const syncIframeHeight = useCallback(() => {
+    const el = iframeRef.current;
+    const doc = el?.contentDocument;
+    if (!doc?.documentElement) return;
+    const next = Math.max(doc.documentElement.scrollHeight, doc.body?.scrollHeight ?? 0);
+    if (next > 0) el.style.height = `${next}px`;
+  }, []);
+
+  const onIframeLoad = useCallback(() => {
+    syncIframeHeight();
+    // Chart.js layout can settle after first paint
+    requestAnimationFrame(() => {
+      syncIframeHeight();
+      window.setTimeout(syncIframeHeight, 150);
+    });
+  }, [syncIframeHeight]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      title="Single Variant Report"
+      srcDoc={html}
+      onLoad={onIframeLoad}
+      style={{
+        width: '100%',
+        minHeight: 400,
+        height: 400,
+        border: 'none',
+        background: '#F9FAFB',
+        display: 'block',
+      }}
+    />
+  );
+}
+
 export default function ViewPage() {
   const { config_id } = useParams();
   const navigate = useNavigate();
@@ -74,6 +182,7 @@ export default function ViewPage() {
   const config = getConfigById(config_id || '');
   const [activeTab, setActiveTab] = useState<'configuration' | 'report'>('configuration');
   const [stopModal, setStopModal] = useState(false);
+  const [rollbackModal, setRollbackModal] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set(config?.keys.map(k => k.id) || []));
   const [expandedHistory, setExpandedHistory] = useState(true);
 
@@ -90,7 +199,7 @@ export default function ViewPage() {
   const isLive = config.status === 'LIVE';
   const isCompleted = config.status === 'COMPLETED';
   const primaryAction = config.status === 'LIVE'
-    ? { label: 'Stop', onClick: () => stopConfig(config.id), icon: Square, color: '#EF4444', bg: '#FEE2E2', border: '#FECACA' }
+    ? { label: 'Rollback Feature', onClick: () => setRollbackModal(true), icon: Square, color: '#EF4444', bg: '#FEE2E2', border: '#FECACA' }
     : config.status === 'COMPLETED'
       ? { label: 'Duplicate', onClick: () => { duplicateConfigAndStay(); }, icon: Copy, color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' }
       : { label: config.status === 'STOPPED' ? 'Restart' : 'Start', onClick: () => startConfig(config.id), icon: Play, color: '#FFFFFF', bg: '#2563EB', border: '#2563EB' };
@@ -150,7 +259,7 @@ export default function ViewPage() {
       )}
 
       {activeTab === 'report' && (
-        <ReportTab config={config} onDeclareWinner={() => {}} onFullRollout={() => {}} onStop={() => stopConfig(config.id)} />
+        <ReportTab config={config} />
       )}
 
       {/* Stop & Edit Modal */}
@@ -188,6 +297,34 @@ export default function ViewPage() {
               style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, color: '#FFFFFF', background: '#2563EB', border: 'none', borderRadius: 8, cursor: 'pointer' }}
             >
               Stop & Create New Version
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {rollbackModal && (
+        <Modal onClose={() => setRollbackModal(false)}>
+          <div className="flex items-start gap-3 mb-4">
+            <div className="flex items-center justify-center rounded-full shrink-0" style={{ width: 42, height: 42, background: '#FEE2E2' }}>
+              <AlertTriangle size={18} color="#EF4444" />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', margin: 0 }}>Rollback Feature</h3>
+              <p style={{ fontSize: 13, color: '#6B7280', margin: '6px 0 0', lineHeight: 1.6 }}>
+                Are you sure you want to rollback this feature rollout?
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-6">
+            <button onClick={() => setRollbackModal(false)} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#374151', background: '#F3F4F6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+            <button
+              onClick={() => {
+                stopConfig(config.id);
+                setRollbackModal(false);
+              }}
+              style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, color: '#FFFFFF', background: '#EF4444', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+            >
+              Rollback Feature
             </button>
           </div>
         </Modal>
@@ -231,17 +368,23 @@ function ConfigurationTab({ config, expandedKeys, setExpandedKeys, expandedHisto
 }) {
   const typeColor = TYPE_COLORS[config.type] || { bg: '#F3F4F6', text: '#374151' };
   const keys = config.keys || [];
+  const conversionGoals = config.conversionGoals && config.conversionGoals.length > 0
+    ? config.conversionGoals
+    : (config.conversionGoal?.event ? [config.conversionGoal] : []);
   const detailItems: Array<{ label: string; value: React.ReactNode }> = [
     { label: 'Type', value: <span style={{ background: typeColor.bg, color: typeColor.text, padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>{config.type}</span> },
     { label: 'Target Segment', value: config.targetSegment },
     { label: 'Rollout', value: `${config.rolloutPercentage}%` },
     {
-      label: 'Conversion Goal',
-      value: config.conversionGoal?.eventName ? (
+      label: 'Conversion Goals',
+      value: conversionGoals.length > 0 ? (
         <div>
-          <div style={{ fontSize: 12, color: '#374151' }}>Event: {config.conversionGoal.eventName}</div>
-          {config.conversionGoal.attribute && <div style={{ fontSize: 12, color: '#6B7280' }}>Attribute: {config.conversionGoal.attribute}</div>}
-          {config.conversionGoal.attribute && config.conversionGoal.attributeValue && <div style={{ fontSize: 12, color: '#6B7280' }}>Value: {config.conversionGoal.attributeValue}</div>}
+          {conversionGoals.map((goal, index) => (
+            <div key={`${goal.event}_${goal.attribute || 'none'}_${index}`} style={{ fontSize: 12, color: '#6B7280', marginBottom: index === conversionGoals.length - 1 ? 0 : 2 }}>
+              {goal.event}
+              {goal.attribute ? ` (${goal.attribute})` : ''}
+            </div>
+          ))}
         </div>
       ) : (
         <span style={{ fontSize: 12, color: '#9CA3AF' }}>Not selected</span>
@@ -387,10 +530,7 @@ function ConfigurationTab({ config, expandedKeys, setExpandedKeys, expandedHisto
   );
 }
 
-function ReportTab({ config, onDeclareWinner, onFullRollout, onStop }: {
-  config: RemoteConfig; onDeclareWinner: () => void; onFullRollout: () => void; onStop: () => void;
-}) {
-  const canDeclareWinner = config.status === 'LIVE';
+function ReportTab({ config }: { config: RemoteConfig }) {
   const sourceVariants = (config.keys?.[0]?.variants || []).slice(0, 8);
   const normalizedVariants = (sourceVariants.length > 0 ? sourceVariants : [{
     id: 'control_fallback',
@@ -408,11 +548,18 @@ function ReportTab({ config, onDeclareWinner, onFullRollout, onStop }: {
     const conversions = Math.round(users * (rate / 100));
     return { ...variant, isControl, name, traffic, rate, users, conversions, color: REPORT_COLORS[index % REPORT_COLORS.length], key: `v${index}` };
   });
+
+  const activeVariants = normalizedVariants.filter(v => v.traffic > 0.01);
+  const isSingleControlOnly = activeVariants.length === 1 && activeVariants[0].isControl;
+
+  if (isSingleControlOnly) {
+    return <SingleVariantReportView config={config} />;
+  }
+
+  // Keep experiment report UI for non-single-control configurations.
   const controlRate = normalizedVariants.find(v => v.isControl)?.rate || 3.2;
   const bestVariant = normalizedVariants.filter(v => !v.isControl).sort((a, b) => b.rate - a.rate)[0];
   const liftValue = bestVariant ? ((bestVariant.rate - controlRate) / controlRate) * 100 : 0;
-  const totalUsers = normalizedVariants.reduce((sum, v) => sum + v.users, 0);
-  const conversionGoal = config.conversionGoal;
   const exposureData = normalizedVariants.map(v => ({ name: v.name, value: v.traffic, color: v.color }));
   const trendData = Array.from({ length: 7 }, (_, idx) => {
     const row: Record<string, string | number> = { day: `Day ${idx + 1}` };
@@ -423,23 +570,10 @@ function ReportTab({ config, onDeclareWinner, onFullRollout, onStop }: {
     return row;
   });
   const maxRate = Math.max(...normalizedVariants.map(v => v.rate), 0);
+  const totalUsers = normalizedVariants.reduce((sum, v) => sum + v.users, 0);
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="rounded-xl p-4" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>Primary Metric: Conversion Rate</div>
-        {conversionGoal?.eventName ? (
-          <div style={{ fontSize: 12, color: '#6B7280' }}>
-            Event: {conversionGoal.eventName}
-            {conversionGoal.attribute ? ` | Attribute: ${conversionGoal.attribute}` : ''}
-            {conversionGoal.attribute && conversionGoal.attributeValue ? ` | Value: ${conversionGoal.attributeValue}` : ''}
-          </div>
-        ) : (
-          <div style={{ fontSize: 12, color: '#9CA3AF' }}>No conversion goal selected.</div>
-        )}
-      </div>
-
-      {/* Stat cards */}
       <div className="grid grid-cols-5 gap-3">
         <StatCard label="Users Exposed" value={totalUsers.toLocaleString('en-US')} sub="+12.3% this week" color="#2563EB" icon={Users} />
         <StatCard label="Control Conv. Rate" value={`${controlRate.toFixed(1)}%`} sub={normalizedVariants.find(v => v.isControl)?.name || 'Control'} color="#6B7280" icon={Target} />
@@ -449,7 +583,6 @@ function ReportTab({ config, onDeclareWinner, onFullRollout, onStop }: {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        {/* Variant comparison */}
         <div className="col-span-2 rounded-xl p-5" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: 0 }}>Conversion Rate by Variant</h3>
@@ -461,14 +594,7 @@ function ReportTab({ config, onDeclareWinner, onFullRollout, onStop }: {
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={normalizedVariants} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 12, fill: '#6B7280' }}
-                axisLine={false}
-                tickLine={false}
-                interval={0}
-                tickFormatter={(value) => formatVariantAxisLabel(String(value ?? ''))}
-              />
+              <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} interval={0} tickFormatter={(value) => formatVariantAxisLabel(String(value ?? ''))} />
               <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} domain={[0, Math.max(6, Math.ceil(maxRate + 2))]} />
               <RechartsTooltip formatter={(v: any) => [`${v}%`, 'Conv. Rate']} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
               <Bar dataKey="rate" radius={[6, 6, 0, 0]}>
@@ -478,7 +604,6 @@ function ReportTab({ config, onDeclareWinner, onFullRollout, onStop }: {
           </ResponsiveContainer>
         </div>
 
-        {/* Exposure pie */}
         <div className="rounded-xl p-5" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: '0 0 16px' }}>Exposure Distribution</h3>
           <ResponsiveContainer width="100%" height={160}>
@@ -503,7 +628,6 @@ function ReportTab({ config, onDeclareWinner, onFullRollout, onStop }: {
         </div>
       </div>
 
-      {/* Trend chart */}
       <div className="rounded-xl p-5" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
         <h3 style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: '0 0 16px' }}>Conversion Rate Trend</h3>
         <ResponsiveContainer width="100%" height={180}>
@@ -514,85 +638,11 @@ function ReportTab({ config, onDeclareWinner, onFullRollout, onStop }: {
             <RechartsTooltip formatter={(v: any) => [`${v}%`]} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
             <Legend formatter={v => <span style={{ fontSize: 12, color: '#6B7280' }}>{v}</span>} />
             {normalizedVariants.map(v => (
-              <Line
-                key={v.key}
-                dataKey={v.key}
-                name={v.name}
-                stroke={v.color}
-                strokeWidth={v.isControl ? 2 : 2.5}
-                dot={false}
-              />
+              <Line key={v.key} dataKey={v.key} name={v.name} stroke={v.color} strokeWidth={v.isControl ? 2 : 2.5} dot={false} />
             ))}
           </LineChart>
         </ResponsiveContainer>
       </div>
-
-      {/* Variant table */}
-      <div className="rounded-xl overflow-hidden" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
-        <div className="px-5 py-4" style={{ borderBottom: '1px solid #F3F4F6' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: 0 }}>Variant Performance</h3>
-        </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-              {['VARIANT', 'USERS', 'CONVERSIONS', 'CONV. RATE', 'LIFT', 'CONFIDENCE'].map(col => (
-                <th key={col} style={{ padding: '10px 20px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: '0.06em' }}>{col}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {normalizedVariants.map((row, i) => (
-              <tr key={row.name} style={{ borderBottom: i === 0 ? '1px solid #F3F4F6' : 'none' }}>
-                <td style={{ padding: '14px 20px' }}>
-                  <div className="flex items-center gap-2">
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{row.name}</span>
-                    {bestVariant && row.id === bestVariant.id && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ fontSize: 10, color: '#15803D', background: '#DCFCE7', fontWeight: 700 }}>
-                        <Award size={9} />LEADING
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td style={{ padding: '14px 20px', fontSize: 13, color: '#374151' }}>{row.users.toLocaleString('en-US')}</td>
-                <td style={{ padding: '14px 20px', fontSize: 13, color: '#374151' }}>{row.conversions.toLocaleString('en-US')}</td>
-                <td style={{ padding: '14px 20px' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: bestVariant && row.id === bestVariant.id ? '#15803D' : '#374151' }}>{row.rate.toFixed(1)}%</span>
-                </td>
-                <td style={{ padding: '14px 20px' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: row.isControl ? '#9CA3AF' : '#7C3AED' }}>
-                    {row.isControl ? '—' : `${(((row.rate - controlRate) / controlRate) * 100) >= 0 ? '+' : ''}${Math.round(((row.rate - controlRate) / controlRate) * 100)}%`}
-                  </span>
-                </td>
-                <td style={{ padding: '14px 20px' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: row.isControl ? '#9CA3AF' : '#2563EB' }}>{row.isControl ? '—' : '95%'}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Action buttons */}
-      {canDeclareWinner && (
-        <div className="flex items-center gap-3 rounded-xl p-4" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>Ready to Conclude?</div>
-            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>Declare a winner, roll out fully, or stop this experiment.</div>
-          </div>
-          <button onClick={onDeclareWinner} className="flex items-center gap-2 px-4 py-2 rounded-lg" style={{ fontSize: 13, fontWeight: 600, color: '#FFFFFF', background: '#7C3AED', border: 'none', cursor: 'pointer' }}>
-            <Award size={14} />
-            Declare Winner
-          </button>
-          <button onClick={onFullRollout} className="flex items-center gap-2 px-4 py-2 rounded-lg" style={{ fontSize: 13, fontWeight: 600, color: '#15803D', background: '#DCFCE7', border: '1px solid #BBF7D0', cursor: 'pointer' }}>
-            <Zap size={14} />
-            Full Rollout
-          </button>
-          <button onClick={onStop} className="flex items-center gap-2 px-4 py-2 rounded-lg" style={{ fontSize: 13, fontWeight: 600, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', cursor: 'pointer' }}>
-            <Square size={14} />
-            Stop
-          </button>
-        </div>
-      )}
     </div>
   );
 }

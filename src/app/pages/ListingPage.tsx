@@ -250,7 +250,7 @@ export default function ListingPage() {
         <Modal onClose={() => setDeleteTarget(null)}>
           <div className="flex items-start gap-3 mb-4">
             <div className="flex items-center justify-center rounded-full shrink-0" style={{ width: 42, height: 42, background: '#FEE2E2' }}>
-              <Trash2 size={18} color="#EF4444" />
+              <Trash2 size={13} />
             </div>
             <div>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', margin: 0 }}>Delete Configuration</h3>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:auto;min-height:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F9FAFB;color:#111827;font-size:14px}
+.page{max-width:1440px;margin:0 auto}
+.main{padding:20px 24px;display:flex;flex-direction:column;gap:20px}
+.toolbar-title{font-size:13px;font-weight:600;color:#374151}
+.dp-bar{display:flex;align-items:center;gap:6px}
+.dp-custom-wrap{display:flex;align-items:center;gap:0;border:1px solid #E5E7EB;border-radius:6px;overflow:hidden;background:#fff;position:relative}
+.dp-custom-label{font-size:12px;font-weight:500;color:#374151;padding:5px 10px;border-right:1px solid #E5E7EB;white-space:nowrap;background:#F9FAFB}
+.dp-input-row{display:flex;align-items:center;padding:5px 10px;gap:6px;cursor:pointer;min-width:200px}
+.dp-input-row input{border:none;outline:none;font-size:12px;color:#9CA3AF;background:transparent;width:72px;cursor:pointer}
+.dp-input-row input.has-val{color:#111827}
+.dp-arrow{font-size:11px;color:#9CA3AF}
+.range-tabs{display:flex;gap:2px}
+.rtab{padding:5px 10px;font-size:12px;font-weight:500;color:#6B7280;border-radius:6px;cursor:pointer;border:1px solid transparent;background:none}
+.rtab:hover{background:#F3F4F6}
+.rtab.active{background:#3B82F6;color:#fff;border-color:#3B82F6}
+.cal-dropdown{position:absolute;top:calc(100% + 6px);left:0;background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:18px;display:none;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.10);min-width:560px}
+.cal-dropdown.open{display:flex;gap:24px}
+.cal-month{flex:1}
+.cal-month-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.cal-month-title{font-size:14px;font-weight:600;color:#3B82F6}
+.cal-nav{background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:14px;padding:2px 6px;border-radius:4px}
+.cal-nav:hover{background:#F3F4F6;color:#374151}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-dow{font-size:11px;font-weight:500;color:#9CA3AF;text-align:center;padding:4px 0 6px}
+.cal-day{font-size:12px;text-align:center;padding:7px 0;border-radius:6px;cursor:pointer;color:#374151;position:relative}
+.cal-day:hover:not(.other-month):not(.disabled){background:#EFF6FF;color:#3B82F6}
+.cal-day.today{font-weight:700;color:#3B82F6}
+.cal-day.selected{background:#3B82F6;color:#fff;border-radius:6px}
+.cal-day.in-range{background:#EFF6FF;color:#1D4ED8;border-radius:0}
+.cal-day.range-start{background:#3B82F6;color:#fff;border-radius:6px 0 0 6px}
+.cal-day.range-end{background:#3B82F6;color:#fff;border-radius:0 6px 6px 0}
+.cal-day.other-month{color:#D1D5DB;cursor:default}
+.cal-day.disabled{color:#E5E7EB;cursor:default}
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.scard{background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:18px 20px;position:relative}
+.slabel{font-size:12px;color:#6B7280;display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.slabel svg{width:14px;height:14px}
+.sval{font-size:24px;font-weight:700;color:#111827;line-height:1.1;margin-bottom:4px}
+.ssub{font-size:12px;color:#6B7280}
+.ssub.pos{color:#16A34A;font-weight:500}
+.chart-wrap{position:relative;height:180px;margin-top:4px}
+.section-title{font-size:13px;font-weight:600;color:#111827;margin-bottom:2px}
+.section-sub{font-size:12px;color:#6B7280;margin-bottom:16px}
+.chart-legend{display:flex;align-items:center;gap:16px;margin-bottom:12px;flex-wrap:wrap}
+.cl-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#6B7280}
+.cl-dot{width:10px;height:10px;border-radius:50%}
+.cl-dash{width:16px;height:2px;border-top:2px dashed #9CA3AF}
+.bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.donut-wrap{display:flex;align-items:center;gap:20px}
+.donut-canvas{position:relative;width:120px;height:120px;flex-shrink:0}
+.dlegend{display:flex;flex-direction:column;gap:8px;flex:1}
+.dleg-row{display:flex;align-items:center;gap:7px}
+.dleg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.dleg-label{font-size:12px;color:#374151;flex:1}
+.dleg-pct{font-size:12px;font-weight:600;color:#111827}
+.aud-table{width:100%;border-collapse:collapse;margin-top:4px}
+.aud-table th{font-size:11px;color:#9CA3AF;font-weight:500;text-align:left;padding:4px 0 8px;border-bottom:1px solid #F3F4F6}
+.aud-table td{font-size:12px;color:#374151;padding:8px 0;border-bottom:1px solid #F3F4F6}
+.aud-table tr:last-child td{border-bottom:none}
+.aud-table td:last-child,.aud-table th:last-child{text-align:right}
+.aud-bar-wrap{height:4px;background:#F3F4F6;border-radius:2px;margin-top:4px}
+.aud-bar-fill{height:4px;border-radius:2px;background:#3B82F6}
+.tip{position:fixed;background:#1F2937;color:#fff;font-size:12px;padding:8px 12px;border-radius:6px;pointer-events:none;z-index:999;display:none;line-height:1.6;max-width:220px}
+.metric-info{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1.5px solid #D1D5DB;color:#9CA3AF;font-size:9px;font-weight:700;cursor:default;margin-left:5px;flex-shrink:0;font-style:normal}
+.metric-info:hover{border-color:#9CA3AF;color:#6B7280}
+</style>
+</head>
+<body>
+<div class="page">
+<div class="main">
+  <div class="scard" style="padding:16px 20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <span class="toolbar-title">Performance overview · <span id="period-label">Mar 12 – Mar 24, 2026</span></span>
+      <div class="dp-bar">
+        <div class="dp-custom-wrap" id="dp-wrap">
+          <span class="dp-custom-label">Custom</span>
+          <div class="dp-input-row" id="dp-trigger">
+            <input id="dp-start" type="text" placeholder="Start date" readonly/>
+            <span class="dp-arrow">→</span>
+            <input id="dp-end" type="text" placeholder="End date" readonly/>
+          </div>
+          <div class="cal-dropdown" id="cal-dropdown"><div class="cal-month" id="cal-left"></div><div class="cal-month" id="cal-right"></div></div>
+        </div>
+        <div class="range-tabs">
+          <button class="rtab" onclick="quickRange(this,'today')">Today</button>
+          <button class="rtab active" onclick="quickRange(this,'yesterday')">Yesterday</button>
+          <button class="rtab" onclick="quickRange(this,'7d')">7D</button>
+          <button class="rtab" onclick="quickRange(this,'30d')">30D</button>
+          <button class="rtab" onclick="quickRange(this,'3m')">3M</button>
+        </div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div style="padding:0 4px"><div class="slabel">People Reached <i class="metric-info" data-tip="The total number of unique users who received this remote configuration during the selected period. A user is counted once regardless of how many times the config was delivered to their device.">i</i></div><div class="sval">28,410</div><div class="ssub pos">↑ +8.2% vs. previous period</div></div>
+      <div style="padding:0 4px;border-left:1px solid #F3F4F6"><div class="slabel"><span style="color:#3B82F6">Engagement Rate</span><i class="metric-info" data-tip="The percentage of reached users who performed a meaningful in-app action — such as tapping a button, completing a step, or triggering a tracked event — after receiving this configuration. Compared against the pre-config baseline to show the true lift.">i</i></div><div class="sval" style="color:#3B82F6">34.7%</div><div class="ssub pos">↑ +6.1pts vs. pre-config baseline</div></div>
+      <div style="padding:0 4px;border-left:1px solid #F3F4F6"><div class="slabel">Revenue Attributed<i class="metric-info" data-tip="The total revenue generated by users who received this configuration during the selected period. Attribution uses a last-touch model within a 7-day conversion window — meaning a purchase is credited to this config if it was the last configuration the user received before converting.">i</i></div><div class="sval">$12,840</div><div class="ssub pos">↑ +14.3% vs. previous period</div></div>
+    </div>
+  </div>
+  <div class="scard">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="section-title">Reach & Engagement Over Time</div>
+      <div class="chart-legend" style="margin-bottom:0">
+        <div class="cl-item"><div class="cl-dot" style="background:#3B82F6"></div>People reached</div>
+        <div class="cl-item"><div class="cl-dot" style="background:#22C55E"></div>Engagement rate</div>
+        <div class="cl-item"><div class="cl-dash"></div>Pre-config baseline</div>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:200px"><canvas id="mainChart"></canvas></div>
+  </div>
+  <div class="bottom-grid">
+    <div class="scard">
+      <div class="section-title">Audience Breakdown</div>
+      <div class="section-sub">People reached by platform</div>
+      <div class="donut-wrap">
+        <div class="donut-canvas"><canvas id="donutChart"></canvas></div>
+        <div class="dlegend">
+          <div class="dleg-row"><span class="dleg-dot" style="background:#3B82F6"></span><span class="dleg-label">iOS</span><span class="dleg-pct">53%</span></div>
+          <div class="dleg-row"><span class="dleg-dot" style="background:#22C55E"></span><span class="dleg-label">Android</span><span class="dleg-pct">36%</span></div>
+          <div class="dleg-row"><span class="dleg-dot" style="background:#E5E7EB"></span><span class="dleg-label">Web</span><span class="dleg-pct">11%</span></div>
+        </div>
+      </div>
+      <table class="aud-table" style="margin-top:16px">
+        <thead><tr><th>Platform</th><th>Users</th><th>Eng. Rate</th></tr></thead>
+        <tbody>
+          <tr><td><div>iOS</div><div class="aud-bar-wrap"><div class="aud-bar-fill" style="width:53%;background:#3B82F6"></div></div></td><td>14,920</td><td style="color:#16A34A;font-weight:600">37.2%</td></tr>
+          <tr><td><div>Android</div><div class="aud-bar-wrap"><div class="aud-bar-fill" style="width:36%;background:#22C55E"></div></div></td><td>10,240</td><td style="color:#16A34A;font-weight:600">33.1%</td></tr>
+          <tr><td><div>Web</div><div class="aud-bar-wrap"><div class="aud-bar-fill" style="width:11%;background:#9CA3AF"></div></div></td><td>3,250</td><td>28.4%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="scard">
+      <div class="section-title">Top Performing Segments</div>
+      <div class="section-sub">Engagement rate by user segment</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="segChart"></canvas></div>
+    </div>
+  </div>
+</div>
+</div>
+<div class="tip" id="tip"></div>
+<script>
+const labels14=['Mar 11','Mar 12','Mar 13','Mar 14','Mar 15','Mar 16','Mar 17','Mar 18','Mar 19','Mar 20','Mar 21','Mar 22','Mar 23','Mar 24'];
+const reach14=[21800,22430,22890,23210,23640,24050,24380,24900,25340,25810,26290,26740,27350,28410];
+const eng14=[28.1,29.4,30.2,31.1,32.0,32.8,33.2,33.9,34.1,34.5,34.2,34.8,35.0,34.7];
+const baseline=28.1; let mainChart;
+function buildMain(lbls,rVals,eVals){const ctx=document.getElementById('mainChart').getContext('2d');const grad=ctx.createLinearGradient(0,0,0,200);grad.addColorStop(0,'rgba(59,130,246,.12)');grad.addColorStop(1,'rgba(59,130,246,0)');if(mainChart)mainChart.destroy();mainChart=new Chart(ctx,{data:{labels:lbls,datasets:[{type:'line',label:'People reached',data:rVals,yAxisID:'yR',borderColor:'#3B82F6',borderWidth:2,backgroundColor:grad,fill:true,tension:.4,pointRadius:0,pointHoverRadius:5},{type:'line',label:'Engagement rate',data:eVals,yAxisID:'yE',borderColor:'#22C55E',borderWidth:2,tension:.4,pointRadius:0,pointHoverRadius:5},{type:'line',label:'Baseline',data:Array(lbls.length).fill(baseline),yAxisID:'yE',borderColor:'#9CA3AF',borderWidth:1.5,borderDash:[5,4],pointRadius:0}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{backgroundColor:'#1F2937'}},scales:{x:{grid:{display:false},border:{display:false},ticks:{color:'#9CA3AF',maxRotation:0,maxTicksLimit:7}},yR:{position:'left',grid:{color:'#F3F4F6'},border:{display:false},ticks:{color:'#9CA3AF',callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v}},yE:{position:'right',grid:{display:false},border:{display:false},min:20,max:45,ticks:{color:'#9CA3AF',callback:v=>v+'%'}}}}});}
+buildMain(labels14,reach14,eng14);
+const tipEl=document.getElementById('tip');
+document.querySelectorAll('.metric-info').forEach(el=>{el.addEventListener('mouseenter',e=>{tipEl.textContent=el.dataset.tip;tipEl.style.display='block';pos(e)});el.addEventListener('mousemove',pos);el.addEventListener('mouseleave',()=>tipEl.style.display='none')});
+function pos(e){const tw=tipEl.offsetWidth,th=tipEl.offsetHeight;tipEl.style.left=Math.min(e.clientX+12,window.innerWidth-tw-8)+'px';tipEl.style.top=(e.clientY-th-10<8?e.clientY+16:e.clientY-th-10)+'px';}
+new Chart(document.getElementById('donutChart'),{type:'doughnut',data:{labels:['iOS','Android','Web'],datasets:[{data:[53,36,11],backgroundColor:['#3B82F6','#22C55E','#E5E7EB'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{display:false}}}});
+new Chart(document.getElementById('segChart'),{type:'bar',data:{labels:['New users','Power users','Premium','Returning','At-risk'],datasets:[{data:[28.4,52.1,48.7,38.2,19.3],backgroundColor:['#BFDBFE','#3B82F6','#60A5FA','#93C5FD','#E5E7EB'],borderRadius:4,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'#F3F4F6'},border:{display:false},ticks:{color:'#9CA3AF',callback:v=>v+'%'},max:60},y:{grid:{display:false},border:{display:false},ticks:{color:'#374151'}}}}});
+</script>
+</body>
+</html>

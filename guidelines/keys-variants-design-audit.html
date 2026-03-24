@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Keys & Variants Design Audit</title>
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #111827;
+        --muted: #6b7280;
+        --neutral-track: #e5e7eb;
+        --neutral-fill: #9ca3af;
+        --teal-fill: #0f766e;
+        --teal-soft: #d1fae5;
+        --accent: #2563eb;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.35;
+      }
+
+      .wrap {
+        max-width: 1400px;
+        margin: 24px auto;
+        padding: 0 20px 32px;
+      }
+
+      .heading {
+        margin-bottom: 16px;
+      }
+      .heading h1 {
+        margin: 0 0 4px;
+        font-size: 20px;
+      }
+      .heading p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(320px, 1fr));
+        gap: 16px;
+      }
+
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+        min-height: 620px;
+      }
+      .panel h2 {
+        margin: 0 0 6px;
+        font-size: 15px;
+      }
+      .panel .subtitle {
+        margin: 0 0 12px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .key-group {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        overflow: hidden;
+      }
+      .key-head {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        background: #fcfcfd;
+      }
+      .key-title {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0;
+      }
+      .key-name {
+        margin: 2px 0 0;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      /* Approach A */
+      .row-a {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-top: 1px solid #f3f4f6;
+      }
+      .row-a:first-of-type { border-top: none; }
+      .variant-name {
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .variant-value {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: #374151;
+        margin-top: 2px;
+      }
+      .alloc-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pct-pill {
+        min-width: 44px;
+        text-align: center;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        font-size: 11px;
+        font-weight: 700;
+        color: #374151;
+        background: #f9fafb;
+      }
+      .bar-track-small {
+        width: 120px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--neutral-track);
+        overflow: hidden;
+      }
+      .bar-fill-neutral {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--neutral-fill);
+      }
+      .bar-fill-control {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--teal-fill);
+      }
+      .pill-control {
+        color: #0f766e;
+        border-color: #99f6e4;
+        background: var(--teal-soft);
+      }
+
+      /* Approach B */
+      .alloc-summary {
+        padding: 10px 12px 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .segmented {
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: #f3f4f6;
+        display: flex;
+      }
+      .segment { height: 100%; }
+      .legend {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+      }
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        color: #4b5563;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+      }
+      .row-b {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 12px;
+        border-top: 1px solid #f3f4f6;
+      }
+      .pct-text {
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+      }
+
+      /* Approach C */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        padding: 8px 10px;
+        border-bottom: 1px solid #f3f4f6;
+        text-align: left;
+        font-size: 12px;
+      }
+      th {
+        color: #6b7280;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-size: 11px;
+      }
+      td.num, th.num { text-align: right; }
+      .traffic-cell {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 6px;
+      }
+      .mini-track {
+        width: 54px;
+        height: 5px;
+        border-radius: 999px;
+        background: var(--neutral-track);
+        overflow: hidden;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: #374151;
+      }
+      .table-caption {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+        color: #6b7280;
+      }
+
+      .note {
+        margin-top: 16px;
+        background: #ffffff;
+        border: 1px solid #bfdbfe;
+        border-left: 4px solid var(--accent);
+        border-radius: 12px;
+        padding: 14px 16px;
+      }
+      .note h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+      }
+      .note p {
+        margin: 0;
+        font-size: 13px;
+        color: #374151;
+      }
+
+      @media (max-width: 1180px) {
+        .grid { grid-template-columns: 1fr; }
+        .panel { min-height: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="heading">
+        <h1>Keys & Variants Section - Design Audit Comparison</h1>
+        <p>Scenario: Single key group examples for <strong>title</strong> and <strong>addpassengersbtn</strong> with variant traffic 50% / 40% / 10%.</p>
+      </div>
+
+      <div class="grid">
+        <section class="panel">
+          <h2>Approach A - Inline pill + narrow allocation bar</h2>
+          <p class="subtitle">Recommended for balanced readability and low ambiguity.</p>
+
+          <div class="key-group">
+            <div class="key-head">
+              <p class="key-title">Key</p>
+              <p class="key-name">title</p>
+            </div>
+            <div class="row-a">
+              <div>
+                <div class="variant-name">My App Default</div>
+                <div class="variant-value">"Welcome Back!"</div>
+              </div>
+              <div class="alloc-wrap">
+                <span class="pct-pill pill-control">50%</span>
+                <div class="bar-track-small"><div class="bar-fill-control" style="width: 50%"></div></div>
+              </div>
+            </div>
+            <div class="row-a">
+              <div>
+                <div class="variant-name">Title Change</div>
+                <div class="variant-value">"Your Journey Starts Here"</div>
+              </div>
+              <div class="alloc-wrap">
+                <span class="pct-pill">40%</span>
+                <div class="bar-track-small"><div class="bar-fill-neutral" style="width: 40%"></div></div>
+              </div>
+            </div>
+            <div class="row-a">
+              <div>
+                <div class="variant-name">Button Text Change</div>
+                <div class="variant-value">"Plan Your Trip"</div>
+              </div>
+              <div class="alloc-wrap">
+                <span class="pct-pill">10%</span>
+                <div class="bar-track-small"><div class="bar-fill-neutral" style="width: 10%"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="key-group">
+            <div class="key-head">
+              <p class="key-title">Key</p>
+              <p class="key-name">addpassengersbtn</p>
+            </div>
+            <div class="row-a">
+              <div>
+                <div class="variant-name">My App Default</div>
+                <div class="variant-value">"Add Passengers"</div>
+              </div>
+              <div class="alloc-wrap">
+                <span class="pct-pill pill-control">50%</span>
+                <div class="bar-track-small"><div class="bar-fill-control" style="width: 50%"></div></div>
+              </div>
+            </div>
+            <div class="row-a">
+              <div>
+                <div class="variant-name">Title Change</div>
+                <div class="variant-value">"Add Travelers"</div>
+              </div>
+              <div class="alloc-wrap">
+                <span class="pct-pill">40%</span>
+                <div class="bar-track-small"><div class="bar-fill-neutral" style="width: 40%"></div></div>
+              </div>
+            </div>
+            <div class="row-a">
+              <div>
+                <div class="variant-name">Button Text Change</div>
+                <div class="variant-value">"Include Guests"</div>
+              </div>
+              <div class="alloc-wrap">
+                <span class="pct-pill">10%</span>
+                <div class="bar-track-small"><div class="bar-fill-neutral" style="width: 10%"></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Approach B - Stacked allocation summary per key</h2>
+          <p class="subtitle">Good macro readability; less row-level visual weight.</p>
+
+          <div class="key-group">
+            <div class="key-head">
+              <p class="key-title">Key</p>
+              <p class="key-name">title</p>
+            </div>
+            <div class="alloc-summary">
+              <div class="segmented">
+                <div class="segment" title="My App Default - 50%" style="width: 50%; background: #0f766e;"></div>
+                <div class="segment" title="Title Change - 40%" style="width: 40%; background: #9ca3af;"></div>
+                <div class="segment" title="Button Text Change - 10%" style="width: 10%; background: #d1d5db;"></div>
+              </div>
+              <div class="legend">
+                <span class="legend-item"><span class="dot" style="background:#0f766e"></span>My App Default · 50%</span>
+                <span class="legend-item"><span class="dot" style="background:#9ca3af"></span>Title Change · 40%</span>
+                <span class="legend-item"><span class="dot" style="background:#d1d5db"></span>Button Text Change · 10%</span>
+              </div>
+            </div>
+            <div class="row-b">
+              <div>
+                <div class="variant-name">My App Default</div>
+                <div class="variant-value">"Welcome Back!"</div>
+              </div>
+              <div class="pct-text">50%</div>
+            </div>
+            <div class="row-b">
+              <div>
+                <div class="variant-name">Title Change</div>
+                <div class="variant-value">"Your Journey Starts Here"</div>
+              </div>
+              <div class="pct-text">40%</div>
+            </div>
+            <div class="row-b">
+              <div>
+                <div class="variant-name">Button Text Change</div>
+                <div class="variant-value">"Plan Your Trip"</div>
+              </div>
+              <div class="pct-text">10%</div>
+            </div>
+          </div>
+
+          <div class="key-group">
+            <div class="key-head">
+              <p class="key-title">Key</p>
+              <p class="key-name">addpassengersbtn</p>
+            </div>
+            <div class="alloc-summary">
+              <div class="segmented">
+                <div class="segment" title="My App Default - 50%" style="width: 50%; background: #0f766e;"></div>
+                <div class="segment" title="Title Change - 40%" style="width: 40%; background: #9ca3af;"></div>
+                <div class="segment" title="Button Text Change - 10%" style="width: 10%; background: #d1d5db;"></div>
+              </div>
+              <div class="legend">
+                <span class="legend-item"><span class="dot" style="background:#0f766e"></span>My App Default · 50%</span>
+                <span class="legend-item"><span class="dot" style="background:#9ca3af"></span>Title Change · 40%</span>
+                <span class="legend-item"><span class="dot" style="background:#d1d5db"></span>Button Text Change · 10%</span>
+              </div>
+            </div>
+            <div class="row-b">
+              <div>
+                <div class="variant-name">My App Default</div>
+                <div class="variant-value">"Add Passengers"</div>
+              </div>
+              <div class="pct-text">50%</div>
+            </div>
+            <div class="row-b">
+              <div>
+                <div class="variant-name">Title Change</div>
+                <div class="variant-value">"Add Travelers"</div>
+              </div>
+              <div class="pct-text">40%</div>
+            </div>
+            <div class="row-b">
+              <div>
+                <div class="variant-name">Button Text Change</div>
+                <div class="variant-value">"Include Guests"</div>
+              </div>
+              <div class="pct-text">10%</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Approach C - Dense table with explicit columns</h2>
+          <p class="subtitle">Most scannable for developers; can feel less product-friendly.</p>
+
+          <div class="key-group">
+            <div class="key-head">
+              <p class="key-title">Key</p>
+              <p class="key-name">title</p>
+            </div>
+            <div class="table-caption">Users shown as mock projection from total key traffic.</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Variant</th>
+                  <th>Value</th>
+                  <th class="num">Traffic %</th>
+                  <th class="num">Users</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>My App Default</strong></td>
+                  <td class="mono">"Welcome Back!"</td>
+                  <td class="num">
+                    <span class="traffic-cell">
+                      <span>50%</span>
+                      <span class="mini-track"><span class="bar-fill-control" style="display:block;width:50%;height:100%"></span></span>
+                    </span>
+                  </td>
+                  <td class="num">14,205</td>
+                </tr>
+                <tr>
+                  <td><strong>Title Change</strong></td>
+                  <td class="mono">"Your Journey Starts Here"</td>
+                  <td class="num">
+                    <span class="traffic-cell">
+                      <span>40%</span>
+                      <span class="mini-track"><span class="bar-fill-neutral" style="display:block;width:40%;height:100%"></span></span>
+                    </span>
+                  </td>
+                  <td class="num">11,364</td>
+                </tr>
+                <tr>
+                  <td><strong>Button Text Change</strong></td>
+                  <td class="mono">"Plan Your Trip"</td>
+                  <td class="num">
+                    <span class="traffic-cell">
+                      <span>10%</span>
+                      <span class="mini-track"><span class="bar-fill-neutral" style="display:block;width:10%;height:100%"></span></span>
+                    </span>
+                  </td>
+                  <td class="num">2,841</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="key-group">
+            <div class="key-head">
+              <p class="key-title">Key</p>
+              <p class="key-name">addpassengersbtn</p>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Variant</th>
+                  <th>Value</th>
+                  <th class="num">Traffic %</th>
+                  <th class="num">Users</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>My App Default</strong></td>
+                  <td class="mono">"Add Passengers"</td>
+                  <td class="num">
+                    <span class="traffic-cell">
+                      <span>50%</span>
+                      <span class="mini-track"><span class="bar-fill-control" style="display:block;width:50%;height:100%"></span></span>
+                    </span>
+                  </td>
+                  <td class="num">14,205</td>
+                </tr>
+                <tr>
+                  <td><strong>Title Change</strong></td>
+                  <td class="mono">"Add Travelers"</td>
+                  <td class="num">
+                    <span class="traffic-cell">
+                      <span>40%</span>
+                      <span class="mini-track"><span class="bar-fill-neutral" style="display:block;width:40%;height:100%"></span></span>
+                    </span>
+                  </td>
+                  <td class="num">11,364</td>
+                </tr>
+                <tr>
+                  <td><strong>Button Text Change</strong></td>
+                  <td class="mono">"Include Guests"</td>
+                  <td class="num">
+                    <span class="traffic-cell">
+                      <span>10%</span>
+                      <span class="mini-track"><span class="bar-fill-neutral" style="display:block;width:10%;height:100%"></span></span>
+                    </span>
+                  </td>
+                  <td class="num">2,841</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <section class="note">
+        <h3>Design Recommendation: Approach A</h3>
+        <p>
+          Approach A best resolves the current ambiguity with minimal cognitive load. It keeps row-level context (variant name + value + allocation) tightly grouped, replaces edge-to-edge bars with constrained indicators that no longer read as loading states, and preserves fast scanability for both marketers and developers. Approach B is excellent for aggregate distribution but requires extra eye movement to map segments back to rows. Approach C is strongest for engineering density, but it feels heavier and less approachable in mixed product/marketing workflows.
+        </p>
+      </section>
+    </div>
+  </body>
+</html>

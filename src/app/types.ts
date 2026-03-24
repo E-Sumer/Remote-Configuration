@@ -29,9 +29,8 @@ export interface Parameter {
 }
 
 export interface ConversionGoal {
-  eventName: string;
+  event: string;
   attribute?: string;
-  attributeValue?: string;
 }
 
 export interface VersionEntry {
@@ -65,6 +64,7 @@ export interface RemoteConfig {
   keys?: ConfigKey[];
   parameters?: Parameter[];
   conversionGoal?: ConversionGoal;
+  conversionGoals?: ConversionGoal[];
   usedInCampaign?: boolean;
   parentId?: string;
 }
