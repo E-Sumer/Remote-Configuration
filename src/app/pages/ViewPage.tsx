@@ -574,22 +574,17 @@ function ReportTab({ config }: { config: RemoteConfig }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <StatCard label="Users Exposed" value={totalUsers.toLocaleString('en-US')} sub="+12.3% this week" color="#2563EB" icon={Users} />
         <StatCard label="Control Conv. Rate" value={`${controlRate.toFixed(1)}%`} sub={normalizedVariants.find(v => v.isControl)?.name || 'Control'} color="#6B7280" icon={Target} />
         <StatCard label={bestVariant ? `${bestVariant.name} Conv. Rate` : 'Variant Conv. Rate'} value={bestVariant ? `${bestVariant.rate.toFixed(1)}%` : '—'} sub={bestVariant ? 'Best performer' : 'No test variant'} color="#22C55E" icon={TrendingUp} />
         <StatCard label="Lift" value={bestVariant ? `${liftValue >= 0 ? '+' : ''}${Math.round(liftValue)}%` : '—'} sub="vs control" color="#7C3AED" icon={Zap} />
-        <StatCard label="Confidence" value="95%" sub="Statistically significant" color="#2563EB" icon={Award} />
       </div>
 
       <div className="grid grid-cols-3 gap-5">
         <div className="col-span-2 rounded-xl p-5" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: 0 }}>Conversion Rate by Variant</h3>
-            <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-              <Info size={11} color="#2563EB" />
-              <span style={{ fontSize: 11, color: '#2563EB', fontWeight: 500 }}>95% confidence</span>
-            </div>
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={normalizedVariants} barCategoryGap="30%">

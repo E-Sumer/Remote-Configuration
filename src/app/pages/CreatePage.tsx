@@ -340,16 +340,31 @@ export default function CreatePage() {
 
   const onUpdateParameter = (id: string, patch: Partial<Parameter>) => {
     setIsDirty(true);
-    setParams(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+    setParams(prev => {
+      const current = prev.find(p => p.id === id);
+      const oldValue = current?.value ?? '';
+      const nextValue =
+        typeof patch.value === 'string'
+          ? patch.value
+          : (patch.dataType === 'JSON' ? '{\n}' : patch.dataType === 'Boolean' ? 'false' : undefined);
+
+      if (nextValue !== undefined && nextValue !== oldValue) {
+        setVariants(vprev => vprev.map(v => {
+          const existing = v.overrides[id];
+          const shouldSync = v.role === 'control' || existing === undefined || String(existing) === String(oldValue);
+          if (!shouldSync) return v;
+          return { ...v, overrides: { ...v.overrides, [id]: nextValue } };
+        }));
+      }
+
+      return prev.map(p => (p.id === id ? { ...p, ...patch, ...(nextValue !== undefined ? { value: nextValue } : {}) } : p));
+    });
     if (typeof patch.name === 'string') {
       setConflictParamErrors(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
       });
-    }
-    if (patch.dataType && patch.dataType === 'Boolean') {
-      setParams(prev => prev.map(p => (p.id === id && !p.value ? { ...p, value: 'false' } : p)));
     }
   };
 
@@ -655,7 +670,15 @@ export default function CreatePage() {
                           <div>
                             <label style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, display: 'block', marginBottom: 4 }}>DATA TYPE *</label>
                             <div>
-                              <Select value={p.dataType} onValueChange={(value) => onUpdateParameter(p.id, { dataType: value as ConfigType, value: value === 'Boolean' ? 'false' : '' })}>
+                              <Select
+                                value={p.dataType}
+                                onValueChange={(value) =>
+                                  onUpdateParameter(p.id, {
+                                    dataType: value as ConfigType,
+                                    value: value === 'Boolean' ? 'false' : value === 'JSON' ? '{\n}' : '',
+                                  })
+                                }
+                              >
                                 <SelectTrigger className={SELECT_TRIGGER_CLASS} style={{ ...SELECT_TRIGGER_STYLE, height: 48, minHeight: 48, width: '100%' }}>
                                   <SelectValue />
                                 </SelectTrigger>
@@ -1231,15 +1254,29 @@ export default function CreatePage() {
                       {params.map(p => (
                         <div key={`${variant.id}_${p.id}`} style={{ marginBottom: 8 }}>
                           <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>{p.name || 'Unnamed parameter'}</label>
-                          <ValueEditor
-                            disabled={idx === 0}
-                            param={{ ...p, value: variant.overrides[p.id] ?? p.value }}
-                            onChange={(nextVal) => {
-                              if (idx === 0) return;
-                              setIsDirty(true);
-                              setVariants(prev => prev.map(v => v.id === variant.id ? { ...v, overrides: { ...v.overrides, [p.id]: nextVal } } : v));
-                            }}
-                          />
+                          {p.dataType === 'JSON' ? (
+                            <VariantJsonOverrideEditor
+                              disabled={idx === 0}
+                              invalid={showStep2Errors && Boolean(step2Errors[`value_${p.id}` as any])}
+                              baseValue={String(p.value ?? '')}
+                              overrideValue={variant.overrides[p.id] == null ? null : String(variant.overrides[p.id])}
+                              onChange={(nextVal) => {
+                                if (idx === 0) return;
+                                setIsDirty(true);
+                                setVariants(prev => prev.map(v => v.id === variant.id ? { ...v, overrides: { ...v.overrides, [p.id]: nextVal } } : v));
+                              }}
+                            />
+                          ) : (
+                            <ValueEditor
+                              disabled={idx === 0}
+                              param={{ ...p, value: variant.overrides[p.id] ?? p.value }}
+                              onChange={(nextVal) => {
+                                if (idx === 0) return;
+                                setIsDirty(true);
+                                setVariants(prev => prev.map(v => v.id === variant.id ? { ...v, overrides: { ...v.overrides, [p.id]: nextVal } } : v));
+                              }}
+                            />
+                          )}
                         </div>
                       ))}
                     </>
@@ -1687,4 +1724,132 @@ function ValueEditor({
     return <input type="number" value={param.value} disabled={disabled} onChange={e => onChange(e.target.value)} style={style} />;
   }
   return <input type="text" value={param.value} disabled={disabled} onChange={e => onChange(e.target.value)} style={style} />;
+}
+
+function VariantJsonOverrideEditor({
+  baseValue,
+  overrideValue,
+  disabled,
+  invalid,
+  onChange,
+}: {
+  baseValue: string;
+  overrideValue?: string | null;
+  disabled?: boolean;
+  invalid?: boolean;
+  onChange: (next: string) => void;
+}) {
+  const baseInput: React.CSSProperties = {
+    width: '100%',
+    height: 40,
+    minHeight: 40,
+    padding: '8px 10px',
+    fontSize: 13,
+    color: '#111827',
+    border: `1px solid ${invalid ? '#EF4444' : '#E5E7EB'}`,
+    borderRadius: 8,
+    outline: 'none',
+    boxSizing: 'border-box',
+    background: disabled ? '#F9FAFB' : '#FFFFFF',
+    fontFamily: 'Inter, sans-serif',
+  };
+
+  let baseParsed: any = null;
+  try { baseParsed = JSON.parse(baseValue || '{}'); } catch { baseParsed = null; }
+  const baseIsPlainObject = baseParsed && typeof baseParsed === 'object' && !Array.isArray(baseParsed);
+
+  let overrideParsed: any = null;
+  const overrideRaw = (overrideValue ?? '').trim();
+  if (overrideRaw) {
+    try { overrideParsed = JSON.parse(overrideRaw); } catch { overrideParsed = null; }
+  }
+  const overrideIsPlainObject = overrideParsed && typeof overrideParsed === 'object' && !Array.isArray(overrideParsed);
+
+  if (!baseIsPlainObject) {
+    return (
+      <textarea
+        value={overrideRaw || baseValue}
+        disabled={disabled}
+        onChange={e => onChange(e.target.value)}
+        rows={4}
+        style={{ ...baseInput, height: 'auto', minHeight: 48, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', resize: 'vertical' }}
+      />
+    );
+  }
+
+  const keys = Object.keys(baseParsed);
+  const currentObj: Record<string, any> = {
+    ...baseParsed,
+    ...(overrideIsPlainObject ? overrideParsed : {}),
+  };
+  const updateKey = (k: string, next: any) => {
+    const nextObj = { ...currentObj, [k]: next };
+    onChange(JSON.stringify(nextObj, null, 2));
+  };
+
+  return (
+    <div className="rounded-xl" style={{ border: `1px solid ${invalid ? '#EF4444' : '#E5E7EB'}`, background: disabled ? '#F9FAFB' : '#FFFFFF', padding: 10 }}>
+      <div className="flex flex-col gap-2">
+        {keys.length === 0 && (
+          <div style={{ fontSize: 12, color: '#6B7280', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+            {'{ }'}
+          </div>
+        )}
+        {keys.map((k) => {
+          const baseV = baseParsed[k];
+          const v = Object.prototype.hasOwnProperty.call(currentObj, k) ? currentObj[k] : baseV;
+          const t = typeof baseV;
+          return (
+            <div key={k} className="flex items-center gap-2">
+              <div
+                className="px-2 py-1 rounded-lg"
+                style={{
+                  background: '#F3F4F6',
+                  border: '1px solid #E5E7EB',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  fontSize: 12,
+                  color: '#111827',
+                  minWidth: 140,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                title={k}
+              >
+                {k}
+              </div>
+
+              {t === 'boolean' ? (
+                <Select value={v ? 'true' : 'false'} onValueChange={(val) => updateKey(k, val === 'true')} disabled={disabled}>
+                  <SelectTrigger className={SELECT_TRIGGER_CLASS} style={{ ...SELECT_TRIGGER_STYLE, height: 40, minHeight: 40, width: 140 }}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">true</SelectItem>
+                    <SelectItem value="false">false</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : t === 'number' ? (
+                <input
+                  type="number"
+                  value={Number.isFinite(v) ? String(v) : ''}
+                  disabled={disabled}
+                  onChange={(e) => updateKey(k, e.target.value === '' ? 0 : Number(e.target.value))}
+                  style={baseInput}
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={v == null ? '' : String(v)}
+                  disabled={disabled}
+                  onChange={(e) => updateKey(k, e.target.value)}
+                  style={baseInput}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

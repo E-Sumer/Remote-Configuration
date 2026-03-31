@@ -397,7 +397,25 @@ export default function EditPage() {
 
   const onUpdate = (id: string, patch: Partial<Parameter>) => {
     if (isReadOnly) return;
-    setParams(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+    setParams(prev => {
+      const current = prev.find(p => p.id === id);
+      const oldValue = current?.value ?? '';
+      const nextValue =
+        typeof patch.value === 'string'
+          ? patch.value
+          : (patch.dataType === 'JSON' ? '{\n}' : patch.dataType === 'Boolean' ? 'false' : undefined);
+
+      if (nextValue !== undefined && nextValue !== oldValue) {
+        setVariants(vprev => vprev.map(v => {
+          const existing = v.overrides[id];
+          const shouldSync = v.role === 'control' || existing === undefined || String(existing) === String(oldValue);
+          if (!shouldSync) return v;
+          return { ...v, overrides: { ...v.overrides, [id]: nextValue } };
+        }));
+      }
+
+      return prev.map(p => (p.id === id ? { ...p, ...patch, ...(nextValue !== undefined ? { value: nextValue } : {}) } : p));
+    });
     if (typeof patch.name === 'string') {
       setConflictParamErrors(prev => {
         const next = { ...prev };
@@ -725,7 +743,17 @@ export default function EditPage() {
               <div>
                           <label style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, display: 'block', marginBottom: 4 }}>DATA TYPE *</label>
                           <div className="relative">
-                            <select value={p.dataType} disabled={isReadOnly} onChange={e => onUpdate(p.id, { dataType: e.target.value as ConfigType, value: e.target.value === 'Boolean' ? 'false' : '' })} style={{ ...inputStyle(), appearance: 'none', paddingRight: 28 }}>
+                            <select
+                              value={p.dataType}
+                              disabled={isReadOnly}
+                              onChange={e =>
+                                onUpdate(p.id, {
+                                  dataType: e.target.value as ConfigType,
+                                  value: e.target.value === 'Boolean' ? 'false' : e.target.value === 'JSON' ? '{\n}' : '',
+                                })
+                              }
+                              style={{ ...inputStyle(), appearance: 'none', paddingRight: 28 }}
+                            >
                               {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                             <ChevronDown size={13} color="#9CA3AF" className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1362,15 +1390,28 @@ export default function EditPage() {
                       {params.map(p => (
                         <div key={`${variant.id}_${p.id}`} style={{ marginBottom: 8 }}>
                           <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>{p.name || 'Unnamed parameter'}</label>
-                          <ValueEditor
-                            disabled={isReadOnly || idx === 0}
-                            param={{ ...p, value: variant.overrides[p.id] ?? p.value }}
-                            onChange={(nextVal) => {
-                              if (isReadOnly || idx === 0) return;
-                              setIsDirty(true);
-                              setVariants(prev => prev.map(v => v.id === variant.id ? { ...v, overrides: { ...v.overrides, [p.id]: nextVal } } : v));
-                            }}
-                          />
+                          {p.dataType === 'JSON' ? (
+                            <VariantJsonOverrideEditor
+                              disabled={isReadOnly || idx === 0}
+                              baseValue={String(p.value ?? '')}
+                              overrideValue={variant.overrides[p.id] == null ? null : String(variant.overrides[p.id])}
+                              onChange={(nextVal) => {
+                                if (isReadOnly || idx === 0) return;
+                                setIsDirty(true);
+                                setVariants(prev => prev.map(v => v.id === variant.id ? { ...v, overrides: { ...v.overrides, [p.id]: nextVal } } : v));
+                              }}
+                            />
+                          ) : (
+                            <ValueEditor
+                              disabled={isReadOnly || idx === 0}
+                              param={{ ...p, value: variant.overrides[p.id] ?? p.value }}
+                              onChange={(nextVal) => {
+                                if (isReadOnly || idx === 0) return;
+                                setIsDirty(true);
+                                setVariants(prev => prev.map(v => v.id === variant.id ? { ...v, overrides: { ...v.overrides, [p.id]: nextVal } } : v));
+                              }}
+                            />
+                          )}
                             </div>
                           ))}
                     </>
@@ -1757,4 +1798,141 @@ function ValueEditor({
   }
 
   return <input type="text" value={param.value} disabled={disabled} onChange={e => onChange(e.target.value)} style={style} />;
+}
+
+function VariantJsonOverrideEditor({
+  baseValue,
+  overrideValue,
+  disabled,
+  invalid,
+  onChange,
+}: {
+  baseValue: string;
+  overrideValue?: string | null;
+  disabled?: boolean;
+  invalid?: boolean;
+  onChange: (next: string) => void;
+}) {
+  const baseInput: React.CSSProperties = {
+    width: '100%',
+    height: 40,
+    minHeight: 40,
+    padding: '8px 10px',
+    fontSize: 13,
+    color: '#111827',
+    border: `1px solid ${invalid ? '#EF4444' : '#E5E7EB'}`,
+    borderRadius: 8,
+    outline: 'none',
+    boxSizing: 'border-box',
+    background: disabled ? '#F9FAFB' : '#FFFFFF',
+    fontFamily: 'Inter, sans-serif',
+  };
+
+  let baseParsed: any = null;
+  try { baseParsed = JSON.parse(baseValue || '{}'); } catch { baseParsed = null; }
+  const baseIsPlainObject = baseParsed && typeof baseParsed === 'object' && !Array.isArray(baseParsed);
+
+  let overrideParsed: any = null;
+  const overrideRaw = (overrideValue ?? '').trim();
+  if (overrideRaw) {
+    try { overrideParsed = JSON.parse(overrideRaw); } catch { overrideParsed = null; }
+  }
+  const overrideIsPlainObject = overrideParsed && typeof overrideParsed === 'object' && !Array.isArray(overrideParsed);
+
+  if (!baseIsPlainObject) {
+    return (
+      <textarea
+        value={overrideRaw || baseValue}
+        disabled={disabled}
+        onChange={e => onChange(e.target.value)}
+        rows={4}
+        style={{ ...baseInput, height: 'auto', minHeight: 48, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', resize: 'vertical' }}
+      />
+    );
+  }
+
+  const keys = Object.keys(baseParsed);
+  const currentObj: Record<string, any> = {
+    ...baseParsed,
+    ...(overrideIsPlainObject ? overrideParsed : {}),
+  };
+  const updateKey = (k: string, next: any) => {
+    const nextObj = { ...currentObj, [k]: next };
+    onChange(JSON.stringify(nextObj, null, 2));
+  };
+
+  return (
+    <div className="rounded-xl" style={{ border: `1px solid ${invalid ? '#EF4444' : '#E5E7EB'}`, background: disabled ? '#F9FAFB' : '#FFFFFF', padding: 10 }}>
+      <div className="flex flex-col gap-2">
+        {keys.length === 0 && (
+          <div style={{ fontSize: 12, color: '#6B7280', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+            {'{ }'}
+          </div>
+        )}
+        {keys.map((k) => {
+          const baseV = baseParsed[k];
+          const v = Object.prototype.hasOwnProperty.call(currentObj, k) ? currentObj[k] : baseV;
+          const t = typeof baseV;
+          return (
+            <div key={k} className="flex items-center gap-2">
+              <div
+                className="px-2 py-1 rounded-lg"
+                style={{
+                  background: '#F3F4F6',
+                  border: '1px solid #E5E7EB',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  fontSize: 12,
+                  color: '#111827',
+                  minWidth: 140,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                title={k}
+              >
+                {k}
+              </div>
+
+              {t === 'boolean' ? (
+                <Select value={v ? 'true' : 'false'} onValueChange={(val) => updateKey(k, val === 'true')} disabled={disabled}>
+                  <SelectTrigger
+                    className={SELECT_TRIGGER_CLASS}
+                    style={{
+                      ...SELECT_TRIGGER_STYLE,
+                      width: 140,
+                      height: 40,
+                      minHeight: 40,
+                      borderColor: invalid ? '#EF4444' : '#E5E7EB',
+                    }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="false">FALSE</SelectItem>
+                    <SelectItem value="true">TRUE</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : t === 'number' ? (
+                <input
+                  type="number"
+                  value={Number.isFinite(v) ? String(v) : ''}
+                  disabled={disabled}
+                  onChange={(e) => updateKey(k, e.target.value === '' ? 0 : Number(e.target.value))}
+                  style={baseInput}
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={v == null ? '' : String(v)}
+                  disabled={disabled}
+                  onChange={(e) => updateKey(k, e.target.value)}
+                  style={baseInput}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
